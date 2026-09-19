@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Z-FIN - 스마트 가계부</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .app-container { max-width: 480px; margin: 0 auto; height: 100vh; background-color: #ffffff; position: relative; overflow: hidden; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+        .view-content { position: absolute; top: 0; left: 0; right: 0; bottom: 64px; overflow-y: auto; background-color: #f8fafc; }
+        
+        /* 스크롤바 숨기기 (모바일 앱 느낌) */
+        .view-content::-webkit-scrollbar { display: none; }
+        .view-content { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* 하단 네비게이션 */
+        .bottom-nav { position: absolute; bottom: 0; left: 0; right: 0; height: 64px; background-color: #ffffff; border-top: 1px solid #e2e8f0; display: flex; z-index: 50; }
+        .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #94a3b8; transition: color 0.2s; cursor: pointer; }
+        .nav-item.active { color: #3b82f6; }
+        .nav-item i { font-size: 1.25rem; margin-bottom: 4px; }
+        .nav-item span { font-size: 0.7rem; font-weight: 600; }
+        
+        /* 돼지 이미지 합성 처리 */
+        .pig-image { mix-blend-mode: multiply; width: 100%; max-width: 250px; margin: 0 auto; display: block; }
+        
+        /* 달력 스타일 */
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background-color: #e2e8f0; border: 1px solid #e2e8f0; }
+        .calendar-header { display: grid; grid-template-columns: repeat(7, 1fr); background-color: #f8fafc; text-align: center; font-size: 0.75rem; font-weight: 600; color: #64748b; padding: 8px 0; }
+        .calendar-cell { background-color: #ffffff; min-height: 80px; padding: 4px; display: flex; flex-direction: column; }
+        .calendar-cell.active-period { background-color: #f0fdf4; } /* 주기 내 날짜 강조 */
+        .calendar-date { font-size: 0.75rem; font-weight: 600; color: #334155; margin-bottom: 2px; }
+        .transaction-text { font-size: 0.65rem; font-weight: 700; color: #ef4444; word-break: break-all; margin-top: 2px; line-height: 1.2; }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        
+        <!-- 1. 설정 화면 -->
+        <div id="view-settings" class="view-content hidden p-5">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6">설정</h2>
+            
+            <div class="space-y-4">
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                    <h3 class="font-semibold text-gray-700 mb-3"><i class="fas fa-calendar-alt text-blue-500 mr-2"></i>목표 주기</h3>
+                    <div class="flex space-x-2">
+                        <div class="flex-1">
+                            <label class="block text-xs text-gray-500 mb-1">시작 날짜</label>
+                            <input type="date" id="set-start-date" class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2 text-sm outline-none focus:border-blue-500">
+                        </div>
+                        <div class="flex-1">
+                            <label class="block text-xs text-gray-500 mb-1">끝 날짜</label>
+                            <input type="date" id="set-end-date" class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2 text-sm outline-none focus:border-blue-500">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                    <h3 class="font-semibold text-gray-700 mb-3"><i class="fas fa-wallet text-green-500 mr-2"></i>재정 정보</h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">주기별 소득량 (원)</label>
+                            <input type="number" id="set-income" class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2 text-sm outline-none focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">고정 지출 (원)</label>
+                            <input type="number" id="set-fixed" class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2 text-sm outline-none focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">예상 지출 (원)</label>
+                            <input type="number" id="set-expected" class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2 text-sm outline-none focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">모으고 싶은 돈 (희망 비용, 원)</label>
+                            <input type="number" id="set-target" class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2 text-sm outline-none focus:border-blue-500">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                    <h3 class="font-semibold text-gray-700 mb-3"><i class="fas fa-tags text-purple-500 mr-2"></i>카테고리 관리</h3>
+                    <div id="category-list" class="flex flex-wrap gap-2 mb-3"></div>
+                    <div class="flex space-x-2">
+                        <input type="text" id="new-category" class="flex-1 bg-gray-50 border border-gray-200 rounded-lg p-2 text-sm outline-none focus:border-blue-500">
+                        <button onclick="addCategory()" class="bg-purple-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-purple-600 transition">추가</button>
+                    </div>
+                </div>
+
+                <button onclick="saveSettings()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold text-lg hover:bg-blue-700 transition shadow-md">설정 저장 및 분석</button>
+
+                <div id="analysis-result" class="bg-blue-50 p-4 rounded-xl border border-blue-100 mt-4 hidden">
+                    <h4 class="font-bold text-blue-800 mb-2">재정 분석 결과</h4>
+                    <p id="analysis-text" class="text-sm text-blue-900 leading-relaxed"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. 홈화면 -->
+        <div id="view-home" class="view-content hidden flex flex-col">
+            <!-- 상단 헤더 (일일 분배) -->
+            <div class="bg-blue-600 text-white p-5 rounded-b-2xl shadow-md">
+                <h2 class="text-lg font-semibold mb-1 opacity-90">오늘의 예산</h2>
+                <div class="flex items-end justify-between">
+                    <div class="text-3xl font-bold"><span id="today-remaining">0</span><span class="text-lg opacity-75"> / <span id="today-max">0</span>원</span></div>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-4">
+                <!-- 달력 컨트롤 -->
+                <div class="flex justify-between items-center mb-4">
+                    <button onclick="changeMonth(-1)" class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600"><i class="fas fa-chevron-left"></i></button>
+                    <h3 id="calendar-title" class="font-bold text-lg text-gray-700"></h3>
+                    <button onclick="changeMonth(1)" class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600"><i class="fas fa-chevron-right"></i></button>
+                </div>
+
+                <!-- 달력 Grid -->
+                <div class="rounded-xl overflow-hidden shadow-sm border border-gray-200 bg-white">
+                    <div class="calendar-header">
+                        <div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div>
+                    </div>
+                    <div id="calendar-grid" class="calendar-grid"></div>
+                </div>
+
+                <!-- 지출 기록 기능 (시뮬레이션) -->
+                <div class="mt-6 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                    <h3 class="font-semibold text-gray-700 mb-3"><i class="fas fa-credit-card text-red-500 mr-2"></i>결제 시뮬레이션</h3>
+                    <div class="space-y-3">
+                        <input type="date" id="trans-date" class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2 text-sm outline-none">
+                        <div class="flex space-x-2">
+                            <input type="text" id="trans-location" class="flex-1 bg-gray-50 border border-gray-200 rounded-lg p-2 text-sm outline-none" placeholder="위치 (백화점 등)">
+                            <select id="trans-category" class="w-1/3 bg-gray-50 border border-gray-200 rounded-lg p-2 text-sm outline-none"></select>
+                        </div>
+                        <div class="flex space-x-2">
+                            <input type="number" id="trans-amount" class="flex-1 bg-gray-50 border border-gray-200 rounded-lg p-2 text-sm outline-none" placeholder="사용 금액">
+                            <button onclick="addTransaction()" class="bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-red-600">결제</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. My 돼지 화면 -->
+        <div id="view-pig" class="view-content hidden p-5 flex flex-col items-center justify-center">
+            <div class="w-full bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-6 text-center">
+                <input type="text" id="pig-name" onchange="savePigName()" class="text-2xl font-bold text-center text-gray-800 bg-transparent border-b-2 border-dashed border-gray-300 focus:border-pink-500 outline-none w-3/4 pb-1 mb-2">
+                <p class="text-xs text-gray-500">돼지 이름을 지어주세요!</p>
+            </div>
+
+            <div class="relative w-full aspect-square bg-gradient-to-b from-pink-50 to-white rounded-full border-4 border-pink-100 flex items-center justify-center shadow-inner mb-6">
+                <img src="https://png.pngtree.com/png-vector/20250724/ourlarge/pngtree-cute-piggy-character-illustration-in-cartoon-style-png-image_16684685.webp" alt="Pig" class="pig-image">
+            </div>
+
+            <div class="w-full bg-white p-4 rounded-2xl shadow-sm border border-gray-100 text-center mb-6">
+                <div class="text-sm font-semibold text-gray-600 mb-1">현재 몸무게</div>
+                <div class="text-4xl font-black text-pink-500 mb-2"><span id="pig-weight">0</span>kg</div>
+                <div class="w-full bg-gray-200 rounded-full h-3 mb-2 overflow-hidden">
+                    <div id="pig-progress" class="bg-pink-500 h-3 rounded-full" style="width: 0%"></div>
+                </div>
+                <div class="text-xs text-gray-500"><span id="pig-fed-amount">0</span> / <span id="pig-target-amount">0</span>원 (<span id="pig-percent">0</span>%)</div>
+            </div>
+
+            <button onclick="feedPig()" class="w-full bg-pink-500 text-white py-4 rounded-xl font-bold text-lg hover:bg-pink-600 transition shadow-lg flex items-center justify-center gap-2">
+                <i class="fas fa-coins"></i> 남은 돈 먹이기
+            </button>
+        </div>
+
+        <!-- 4. 돼지 농장 화면 -->
+        <div id="view-farm" class="view-content hidden p-5 bg-green-50">
+            <h2 class="text-2xl font-bold text-green-800 mb-6 flex items-center"><i class="fas fa-tree mr-3"></i>돼지 농장 기록</h2>
+            
+            <div id="farm-list" class="space-y-3 mb-6">
+                <!-- 기록들이 여기에 추가됨 -->
+            </div>
+
+            <button onclick="endCycle()" class="w-full bg-green-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-green-700 transition shadow-lg mt-auto">
+                <i class="fas fa-flag-checkered mr-2"></i>주기 종료 및 저장
+            </button>
+        </div>
+
+        <!-- 하단 네비게이션 -->
+        <div class="bottom-nav">
+            <div class="nav-item" onclick="switchView('settings')">
+                <i class="fas fa-cog"></i>
+                <span>설정</span>
+            </div>
+            <div class="nav-item active" onclick="switchView('home')">
+                <i class="fas fa-home"></i>
+                <span>홈화면</span>
+            </div>
+            <div class="nav-item" onclick="switchView('pig')">
+                <i class="fas fa-piggy-bank"></i>
+                <span>My 돼지</span>
+            </div>
+            <div class="nav-item" onclick="switchView('farm')">
+                <i class="fas fa-leaf"></i>
+                <span>돼지 농장</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 기본 상태 데이터
+        const defaultCategories = ['월세', '전기세', '수도세', '관리비', '간식비', '생활용품', '식비', '취미&여가', '교통비', '계좌이체'];
+        let state = {
+            settings: {
+                startDate: '', endDate: '',
+                income: 0, fixed: 0, expected: 0, target: 0,
+                categories: [...defaultCategories]
+            },
+            transactions: [], // { date, location, amount, category }
+            pigDeposits: [], // { date, amount }
+            pig: { name: '복돼지' },
+            farm: [] // { startDate, endDate, weight, name }
+        };
+
+        let currentCalendarDate = new Date();
+
+        // 유틸리티 함수
+        const formatMoney = (num) => num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        const getDatesDiff = (start, end) => {
+            const s = new Date(start); const e = new Date(end);
+            return Math.max(1, Math.ceil((e - s) / (1000 * 60 * 60 * 24)) + 1); // 포함 일수
+        };
+        const loadData = () => {
+            const saved = localStorage.getItem('zfin_data');
+            if (saved) state = JSON.parse(saved);
+        };
+        const saveData = () => {
+            localStorage.setItem('zfin_data', JSON.stringify(state));
+        };
+        const getTodayString = () => {
+            const d = new Date();
+            const tzOffset = d.getTimezoneOffset() * 60000;
+            return (new Date(d - tzOffset)).toISOString().split('T')[0];
+        };
+
+        function switchView(viewId) {
+            document.querySelectorAll('.view-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            
+            document.getElementById(`view-${viewId}`).classList.remove('hidden');
+            const icons = { 'settings': 0, 'home': 1, 'pig': 2, 'farm': 3 };
+            document.querySelectorAll('.nav-item')[icons[viewId]].classList.add('active');
+
+            if (viewId === 'settings') renderSettings();
+            if (viewId === 'home') renderHome();
+            if (viewId === 'pig') renderPig();
+            if (viewId === 'farm') renderFarm();
+        }
+
+        function renderSettings() {
+            const s = state.settings;
+            document.getElementById('set-start-date').value = s.startDate;
+            document.getElementById('set-end-date').value = s.endDate;
+            document.getElementById('set-income').value = s.income || '';
+            document.getElementById('set-fixed').value = s.fixed || '';
+            document.getElementById('set-expected').value = s.expected || '';
+            document.getElementById('set-target').value = s.target || '';
+            renderCategories();
+            updateAnalysis();
+        }
+
+        function renderCategories() {
+            const list = document.getElementById('category-list');
+            list.innerHTML = state.settings.categories.map(c => 
+                `<span class="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-xs">${c}</span>`
+            ).join('');
+            
+            const select = document.getElementById('trans-category');
+            select.innerHTML = state.settings.categories.map(c => `<option value="${c}">${c}</option>`).join('');
+        }
+
+        function addCategory() {
+            const input = document.getElementById('new-category');
+            const val = input.value.trim();
+            if (val && !state.settings.categories.includes(val)) {
+                state.settings.categories.push(val);
+                input.value = '';
+                saveData();
+                renderCategories();
+            }
+        }
+
+        function saveSettings() {
+            state.settings.startDate = document.getElementById('set-start-date').value;
+            state.settings.endDate = document.getElementById('set-end-date').value;
+            state.settings.income = Number(document.getElementById('set-income').value);
+            state.settings.fixed = Number(document.getElementById('set-fixed').value);
+            state.settings.expected = Number(document.getElementById('set-expected').value);
+            state.settings.target = Number(document.getElementById('set-target').value);
+            
+            if(!state.settings.startDate || !state.settings.endDate) return;
+
+            saveData();
+            updateAnalysis();
+            renderHome(); // 예산 재계산을 위해
+        }
+
+        function updateAnalysis() {
+            const s = state.settings;
+            const res = document.getElementById('analysis-result');
+            const text = document.getElementById('analysis-text');
+            if (!s.income) return;
+
+            const totalNeeded = s.fixed + s.expected + s.target;
+            res.classList.remove('hidden');
+
+            if (s.income >= totalNeeded) {
+                text.innerHTML = `현재 계획이 완벽합니다!<br>목표 저축액을 달성하고도 <b>${formatMoney(s.income - totalNeeded)}원</b>의 여유가 있습니다.`;
+                res.className = "bg-green-50 p-4 rounded-xl border border-green-100 mt-4";
+                text.className = "text-sm text-green-900 leading-relaxed";
+            } else {
+                const diff = totalNeeded - s.income;
+                let msg = `목표를 위해 총 <b>${formatMoney(diff)}원</b>을 더 아껴야 합니다.<br>`;
+                
+                if (s.expected >= diff) {
+                    msg += `[예상 지출] 카테고리에서 ${formatMoney(diff)}원만큼 소비를 줄이세요.`;
+                } else {
+                    msg += `예상 지출을 모두 없애도 ${formatMoney(diff - s.expected)}원이 부족합니다. 목표 금액(희망 비용)을 낮추거나 고정 지출을 확인하세요.`;
+                }
+                
+                text.innerHTML = msg;
+                res.className = "bg-red-50 p-4 rounded-xl border border-red-100 mt-4";
+                text.className = "text-sm text-red-900 leading-relaxed";
+            }
+        }
+
+        function calculateDailyBudget(dateStr) {
+            const s = state.settings;
+            if (!s.startDate || !s.endDate || !s.income) return { max: 0, remaining: 0 };
+
+            const totalDays = getDatesDiff(s.startDate, s.endDate);
+            // 하루 최대 금액 공식: (소득 - 고정지출 - 모으고 싶은 돈) / 시작~끝 날짜 일수
+            let dailyMax = Math.floor((s.income - s.fixed - s.target) / totalDays);
+            if(dailyMax < 0) dailyMax = 0;
+
+            // 해당 날짜의 지출 합계
+            const spent = state.transactions
+                .filter(t => t.date === dateStr)
+                .reduce((sum, t) => sum + t.amount, 0);
+
+            // 해당 날짜의 돼지 저금(먹이) 합계
+            const fed = state.pigDeposits
+                .filter(p => p.date === dateStr)
+                .reduce((sum, p) => sum + p.amount, 0);
+
+            const remaining = dailyMax - spent - fed;
+            return { max: dailyMax, remaining: remaining > 0 ? remaining : 0 };
+        }
+
+        function renderHome() {
+            const today = getTodayString();
+            document.getElementById('trans-date').value = today;
+            
+            const budget = calculateDailyBudget(today);
+            document.getElementById('today-max').textContent = formatMoney(budget.max);
+            document.getElementById('today-remaining').textContent = formatMoney(budget.remaining);
+
+            renderCalendar();
+        }
+
+        function changeMonth(delta) {
+            currentCalendarDate.setMonth(currentCalendarDate.getMonth() + delta);
+            renderCalendar();
+        }
+
+        function renderCalendar() {
+            const year = currentCalendarDate.getFullYear();
+            const month = currentCalendarDate.getMonth();
+            document.getElementById('calendar-title').textContent = `${year}년 ${month + 1}월`;
+
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            
+            const grid = document.getElementById('calendar-grid');
+            grid.innerHTML = '';
+
+            // 이전 달 빈 칸
+            for (let i = 0; i < firstDay.getDay(); i++) {
+                grid.innerHTML += `<div class="calendar-cell bg-gray-50"></div>`;
+            }
+
+            // 날짜 칸
+            const s = state.settings;
+            for (let i = 1; i <= lastDay.getDate(); i++) {
+                const dateObj = new Date(year, month, i);
+                const tzOffset = dateObj.getTimezoneOffset() * 60000;
+                const dateStr = (new Date(dateObj - tzOffset)).toISOString().split('T')[0];
+                
+                // 기간 내인지 확인
+                let isPeriod = false;
+                if(s.startDate && s.endDate && dateStr >= s.startDate && dateStr <= s.endDate) {
+                    isPeriod = true;
+                }
+
+                // 해당 날짜 트랜잭션 가져오기
+                const dayTrans = state.transactions.filter(t => t.date === dateStr);
+                const transHtml = dayTrans.map(t => `<div class="transaction-text">**${t.location} -${t.amount}원</div>`).join('');
+
+                grid.innerHTML += `
+                    <div class="calendar-cell ${isPeriod ? 'active-period' : ''}">
+                        <div class="calendar-date">${i}</div>
+                        ${transHtml}
+                    </div>
+                `;
+            }
+        }
+
+        function addTransaction() {
+            const date = document.getElementById('trans-date').value;
+            const location = document.getElementById('trans-location').value;
+            const category = document.getElementById('trans-category').value;
+            const amount = Number(document.getElementById('trans-amount').value);
+
+            if (!date || !location || !amount) return;
+
+            state.transactions.push({ date, location, category, amount });
+            saveData();
+            
+            // 입력 폼 리셋
+            document.getElementById('trans-location').value = '';
+            document.getElementById('trans-amount').value = '';
+            
+            renderHome();
+        }
+
+        function renderPig() {
+            const pig = state.pig;
+            document.getElementById('pig-name').value = pig.name || '복돼지';
+            
+            const target = state.settings.target || 1; // 0 나누기 방지
+            const totalFed = state.pigDeposits.reduce((sum, d) => sum + d.amount, 0);
+            
+            let percent = Math.floor((totalFed / target) * 100);
+            if (percent > 100) percent = 100;
+
+            let weight = 0;
+            if (percent < 20) weight = 20;
+            else if (percent < 40) weight = 40;
+            else if (percent < 60) weight = 60;
+            else if (percent < 80) weight = 80;
+            else weight = 100;
+
+            document.getElementById('pig-weight').textContent = weight;
+            document.getElementById('pig-progress').style.width = `${percent}%`;
+            document.getElementById('pig-percent').textContent = percent;
+            document.getElementById('pig-fed-amount').textContent = formatMoney(totalFed);
+            document.getElementById('pig-target-amount').textContent = formatMoney(state.settings.target || 0);
+        }
+
+        function savePigName() {
+            state.pig.name = document.getElementById('pig-name').value;
+            saveData();
+        }
+
+        function feedPig() {
+            const today = getTodayString();
+            const budget = calculateDailyBudget(today);
+            
+            if (budget.remaining > 0) {
+                state.pigDeposits.push({ date: today, amount: budget.remaining });
+                saveData();
+                renderPig();
+            }
+        }
+
+        function renderFarm() {
+            const list = document.getElementById('farm-list');
+            list.innerHTML = '';
+            
+            if (state.farm.length === 0) {
+                list.innerHTML = `<div class="text-center text-green-700 py-10 opacity-70">아직 수확한 돼지가 없습니다.</div>`;
+                return;
+            }
+
+            state.farm.forEach(f => {
+                list.innerHTML += `
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-green-100 flex items-center justify-between">
+                        <div>
+                            <div class="text-xs text-green-500 font-bold mb-1">${f.startDate} ~ ${f.endDate}</div>
+                            <div class="font-bold text-gray-800">${f.name}</div>
+                        </div>
+                        <div class="text-2xl font-black text-pink-500">${f.weight}kg</div>
+                    </div>
+                `;
+            });
+        }
+
+        function endCycle() {
+            if (!state.settings.startDate || !state.settings.endDate) return;
+
+            // 현재 돼지 무게 계산 로직 재사용
+            const target = state.settings.target || 1;
+            const totalFed = state.pigDeposits.reduce((sum, d) => sum + d.amount, 0);
+            let percent = Math.floor((totalFed / target) * 100);
+            if (percent > 100) percent = 100;
+
+            let weight = 0;
+            if (percent < 20) weight = 20;
+            else if (percent < 40) weight = 40;
+            else if (percent < 60) weight = 60;
+            else if (percent < 80) weight = 80;
+            else weight = 100;
+
+            // 농장에 기록 저장
+            state.farm.push({
+                startDate: state.settings.startDate,
+                endDate: state.settings.endDate,
+                weight: weight,
+                name: state.pig.name || '복돼지'
+            });
+
+            // 초기화
+            state.pigDeposits = [];
+            state.transactions = [];
+            state.settings.startDate = '';
+            state.settings.endDate = '';
+            // 이름과 설정 금액은 편의상 유지
+            
+            saveData();
+            renderFarm();
+        }
+
+        // 초기 실행
+        window.onload = () => {
+            loadData();
+            renderCategories();
+            switchView('home');
+        };
+    </script>
+</body>
+</html>
